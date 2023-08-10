@@ -80,14 +80,9 @@ exercise_videos = {
     "Plank": "https://www.youtube.com/watch?v=Ehy8G39d_PM",
     "Biceps": "https://www.youtube.com/watch?v=p6YoI2IgmG0&pp=ygUeYmljZXBzIGV4Y2VyaXNlIHZpZGVvICB0cmFpbmln",
 }
-st.write("### Next Steps:")
-action_col1, action_col2,action_col3 = st.columns(3)
-if action_col1.button("Watch Exercise"):
-    st.write(f"You chose to watch {selected_exercise} exercise.")
-    st.video(exercise_videos[selected_exercise])
 
-if action_col2.button("Perform Exercise"):
-    st.write(f"You chose to perform {selected_exercise} exercise.")
+
+st.write(f"You chose to perform {selected_exercise} .")
 transformer_class = exercise_transformers.get(selected_exercise)
 webrtc_ctx = webrtc_streamer(
         key="example",
@@ -96,5 +91,9 @@ webrtc_ctx = webrtc_streamer(
         async_processing=True,
     )
 
+st.write("### Next Steps:")
+action_col1, action_col2,action_col3 = st.columns(3)
 
-# Display Lottie animation
+if action_col1.button("Watch Exercise"):
+    st.write(f"You chose to watch {selected_exercise} exercise.")
+    st.video(exercise_videos[selected_exercise])
