@@ -1,4 +1,6 @@
 av==10.0.0
+opencv-python-headless==4.0.1.24
+opencv-contrib-python-headless==4.8.1.78
 mediapipe==0.9.2.1
 numpy==1.21.5
 pandas==1.4.4
@@ -6,5 +8,4 @@ Requests==2.31.0
 streamlit==1.21.0
 streamlit_lottie==0.0.5
 streamlit_webrtc==0.45.1
-opencv-python-headless==4.0.1.24
-opencv-contrib-python-headless==4.8.1.78
+
