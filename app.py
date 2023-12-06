@@ -89,7 +89,7 @@ webrtc_ctx = webrtc_streamer(
         video_transformer_factory=transformer_class,
         rtc_configuration={  # Add this config
         "iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]
-    },
+    }
 
     )
 
