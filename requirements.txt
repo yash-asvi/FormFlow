@@ -7,3 +7,4 @@ streamlit==1.21.0
 streamlit_lottie==0.0.5
 streamlit_webrtc==0.45.1
 opencv-python-headless==4.0.1.24
+opencv-contrib-python-headless==4.8.1.78
