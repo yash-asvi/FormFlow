@@ -86,7 +86,6 @@ st.write(f"You chose to perform {selected_exercise} .")
 transformer_class = exercise_transformers.get(selected_exercise)
 webrtc_ctx = webrtc_streamer(
         key="example",
-        mode=WebRtcMode.SENDRECV,
         video_transformer_factory=transformer_class,
         rtc_configuration={  # Add this config
         "iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]
