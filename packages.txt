@@ -1,2 +1,2 @@
 libgl1
-libespeak
+libespeak-ng1
