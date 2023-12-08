@@ -8,6 +8,15 @@ from streamlit_webrtc import webrtc_streamer, WebRtcMode, RTCConfiguration, Vide
 import av
 import math
 import pickle
+import pyttsx3
+
+engine = pyttsx3.init()
+voices = engine.getProperty('voices')
+
+selected_voice = voices[1]
+
+engine.setProperty('voice', selected_voice.id)
+engine.setProperty('rate', 125)
 
 import warnings
 warnings.filterwarnings('ignore')
@@ -69,6 +78,8 @@ class SquatFormCorrectionTransformer(VideoTransformerBase):
 
         # Pose detection
         self.pose = mp_pose.Pose(min_detection_confidence=0.5, min_tracking_confidence=0.5)
+        self.frame_count = 0
+
 
     def extract_important_keypoints(self, results) -> list:
         '''
@@ -196,57 +207,43 @@ class SquatFormCorrectionTransformer(VideoTransformerBase):
 
         return analyzed_results
 
+    def say_text(text):
+        engine.say(text)
+        engine.runAndWait()
+
     def transform(self, frame):
 
         image = frame.to_ndarray(format="bgr24")
-
-
-        # Reduce size of a frame
         image = self.rescale_frame(image, 100)
-
-        # Recolor image from BGR to RGB for mediapipe
         image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
         image.flags.writeable = False
-
         results = self.pose.process(image)
 
         if not results.pose_landmarks:
             print("No human found")
-      # Recolor image from BGR to RGB for mediapipe
 
-        # Pose detection
         image.flags.writeable = True
         image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
-
-        # Draw landmarks and connections
         mp_drawing.draw_landmarks(image, results.pose_landmarks, mp_pose.POSE_CONNECTIONS, mp_drawing.DrawingSpec(color=(244, 117, 66), thickness=2, circle_radius=2), mp_drawing.DrawingSpec(color=(245, 66, 230), thickness=2, circle_radius=1))
 
-        # Make detection
         try:
-            # * Model prediction for SQUAT counter
-            # Extract keypoints from frame for the input
             row = self.extract_important_keypoints(results)
             X = pd.DataFrame([row], columns=self.HEADERS[1:])
-
-            # Make prediction and its probability
             predicted_class = self.count_model.predict(X)[0]
             prediction_probabilities = self.count_model.predict_proba(X)[0]
             prediction_probability = round(prediction_probabilities[prediction_probabilities.argmax()], 2)
 
-            # Evaluate model prediction
             if predicted_class == "down" and prediction_probability >= self.PREDICTION_PROB_THRESHOLD:
                 self.current_stage = "down"
             elif self.current_stage == "down" and predicted_class == "up" and prediction_probability >= self.PREDICTION_PROB_THRESHOLD: 
                 self.current_stage = "up"
                 self.counter += 1
 
-            # Analyze squat pose
             analyzed_results = self.analyze_foot_knee_placement(results=results, stage=self.current_stage, foot_shoulder_ratio_thresholds=self.FOOT_SHOULDER_RATIO_THRESHOLDS, knee_foot_ratio_thresholds=self.KNEE_FOOT_RATIO_THRESHOLDS, visibility_threshold=self.VISIBILITY_THRESHOLD)
 
             foot_placement_evaluation = analyzed_results["foot_placement"]
             knee_placement_evaluation = analyzed_results["knee_placement"]
-            
-            # * Evaluate FOOT PLACEMENT error
+
             if foot_placement_evaluation == -1:
                 foot_placement = "UNK"
             elif foot_placement_evaluation == 0:
@@ -255,8 +252,7 @@ class SquatFormCorrectionTransformer(VideoTransformerBase):
                 foot_placement = "Too tight"
             elif foot_placement_evaluation == 2:
                 foot_placement = "Too wide"
-            
-            # * Evaluate KNEE PLACEMENT error
+
             if knee_placement_evaluation == -1:
                 knee_placement = "UNK"
             elif knee_placement_evaluation == 0:
@@ -265,27 +261,58 @@ class SquatFormCorrectionTransformer(VideoTransformerBase):
                 knee_placement = "Too tight"
             elif knee_placement_evaluation == 2:
                 knee_placement = "Too wide"
-            
+
             # Visualization
-            # Status box
+
+
             cv2.rectangle(image, (0, 0), (500, 60), (245, 117, 16), -1)
 
-            # Display class
             cv2.putText(image, "COUNT", (10, 12), cv2.FONT_HERSHEY_COMPLEX, 0.5, (0, 0, 0), 1, cv2.LINE_AA)
             cv2.putText(image, f'{str(self.counter)}, {predicted_class.split(" ")[0]}, {str(prediction_probability)}', (5, 40), cv2.FONT_HERSHEY_COMPLEX, .7, (255, 255, 255), 2, cv2.LINE_AA)
 
-            # Display Foot and Shoulder width ratio
             cv2.putText(image, "FOOT", (200, 12), cv2.FONT_HERSHEY_COMPLEX, 0.5, (0, 0, 0), 1, cv2.LINE_AA)
             cv2.putText(image, foot_placement, (195, 40), cv2.FONT_HERSHEY_COMPLEX, .7, (255, 255, 255), 2, cv2.LINE_AA)
 
-            # Display knee and Shoulder width ratio
+
+
             cv2.putText(image, "KNEE", (330, 12), cv2.FONT_HERSHEY_COMPLEX, 0.5, (0, 0, 0), 1, cv2.LINE_AA)
             cv2.putText(image, knee_placement, (325, 40), cv2.FONT_HERSHEY_COMPLEX, .7, (255, 255, 255), 2, cv2.LINE_AA)
+
+            if foot_placement_evaluation == 1:
+                self.frame_count += 1
+                if self.frame_count >= 5:
+                    engine.say(foot_placement)
+                    engine.runAndWait()
+                    self.frame_count = 0
+            elif foot_placement_evaluation == 2:
+                self.frame_count += 1
+                if self.frame_count >= 5:
+                    engine.say(foot_placement)
+                    engine.runAndWait()
+                    self.frame_count = 0
+
+
+
+            if knee_placement_evaluation == 1:
+                self.frame_count += 1
+                if self.frame_count >= 5:
+                    engine.say(knee_placement)
+                    engine.runAndWait()
+                    self.frame_count = 0
+            elif knee_placement_evaluation == 2:
+                self.frame_count += 1
+                if self.frame_count >= 5:
+                    engine.say(knee_placement)
+                    engine.runAndWait()
+                    self.frame_count = 0
+
+
 
         except Exception as e:
             print(f"Error: {e}")
 
         return image
+
 
 def main():
     st.title("Squat Form Correction")
