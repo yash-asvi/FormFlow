@@ -1,2 +1,3 @@
 libgl1
 libespeak-ng1
+espeak-ng-espeak
