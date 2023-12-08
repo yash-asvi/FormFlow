@@ -8,6 +8,15 @@ from streamlit_webrtc import webrtc_streamer, WebRtcMode, RTCConfiguration, Vide
 import av
 import math
 import pickle
+import pyttsx3
+
+engine = pyttsx3.init()
+voices = engine.getProperty('voices')
+
+selected_voice = voices[1]
+
+engine.setProperty('voice', selected_voice.id)
+engine.setProperty('rate', 125)
 
 import warnings
 warnings.filterwarnings('ignore')
@@ -63,6 +72,8 @@ class BicepVideoTransformer(VideoTransformerBase):
             # Params for peak contraction error detection
             self.peak_contraction_angle = 1000
             self.peak_contraction_frame = None
+            
+
         def calculate_angle(self, point1: list, point2: list, point3: list) -> float:
             '''
             Calculate the angle between 3 points
@@ -224,19 +235,27 @@ class BicepVideoTransformer(VideoTransformerBase):
 
         )
         self.pose = mp_pose.Pose(min_detection_confidence=0.5, min_tracking_confidence=0.5)
+        self.frame_count = 0
+        self.prev_rpc = 0
+        self.prev_lpc = 0
+        self.prev_lb = 0
+        self.prev_rlua = 0
+        self.prev_llua = 0
+        
+
 
        
 
     
 
-    def rescale_frame(self, frame, percent):
+    def rescale_frame(self, frame):
         '''
         Rescale a frame from OpenCV to a certain percentage compare to its original frame
         '''
-        width = int(frame.shape[1] * percent/ 100)
-        height = int(frame.shape[0] * percent/ 100)
+        width = int(frame.shape[1] )
+        height = int(frame.shape[0])
         dim = (width, height)
-        return cv2.resize(frame, dim, interpolation =cv2.INTER_AREA)
+        return cv2.resize(frame, dim)
 
 
 
@@ -255,6 +274,7 @@ class BicepVideoTransformer(VideoTransformerBase):
         
         return np.array(data).flatten().tolist()
 
+    
 
     def transform(self, frame):
         image = frame.to_ndarray(format="bgr24")
@@ -264,7 +284,7 @@ class BicepVideoTransformer(VideoTransformerBase):
 
 
         # Reduce size of a frame
-        image = self.rescale_frame(image, 100)
+        image = self.rescale_frame(image)
         # image = cv2.flip(image, 1)
 
         video_dimensions = [image.shape[1], image.shape[0]]
@@ -368,6 +388,7 @@ class BicepVideoTransformer(VideoTransformerBase):
                 str(self.right_arm_analysis.detected_errors["LOOSE_UPPER_ARM"]),
                 (220, 30),
                 cv2.FONT_HERSHEY_COMPLEX,
+               
                 0.5,
                 (255, 255, 255),
                 2,
@@ -463,6 +484,48 @@ class BicepVideoTransformer(VideoTransformerBase):
                     1,
                     cv2.LINE_AA,
                 )
+                
+            if self.right_arm_analysis.detected_errors["PEAK_CONTRACTION"] > self.prev_rpc:
+                self.frame_count += 1
+                if self.frame_count>= 10:
+                    engine.say("Pull your right arm fully upwards")
+                    engine.runAndWait()
+                    self.prev_rpc = self.right_arm_analysis.detected_errors["PEAK_CONTRACTION"]
+                    self.frame_count = 0
+                    
+
+            if self.left_arm_analysis.detected_errors["PEAK_CONTRACTION"] > self.prev_lpc:
+                self.frame_count += 1
+                if self.frame_count >= 10:
+                    engine.say("Pull your left arm fully upwards")
+                    engine.runAndWait()
+                    self.frame_count = 0
+                    self.prev_lpc= self.left_arm_analysis.detected_errors["PEAK_CONTRACTION"]
+
+            if self.right_arm_analysis.detected_errors["LOOSE_UPPER_ARM"] > self.prev_rlua:
+                self.frame_count += 1
+                if self.frame_count>= 10:
+                    engine.say("Keep your right upper arm fixed")
+                    engine.runAndWait()
+                    self.prev_rlua = self.right_arm_analysis.detected_errors["LOOSE_UPPER_ARM"]
+                    self.frame_count = 0        
+
+            if self.left_arm_analysis.detected_errors["LOOSE_UPPER_ARM"] > self.prev_llua:
+                self.frame_count += 1
+                if self.frame_count >= 10:
+                    engine.say("Keep your left upper arm fixed")
+                    engine.runAndWait()
+                    self.frame_count = 0
+                    self.prev_llua = self.left_arm_analysis.detected_errors["LOOSE_UPPER_ARM"]
+
+            if predicted_class == 'L':
+                self.frame_count += 1
+                if self.frame_count >= 10:
+                    engine.say("Don't lean back ")
+                    engine.runAndWait()
+                    self.frame_count = 0
+
+
 
         except Exception as e:
             print(f"Error: {e}")
