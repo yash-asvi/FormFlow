@@ -8,6 +8,16 @@ from streamlit_webrtc import webrtc_streamer, WebRtcMode, RTCConfiguration, Vide
 import av
 import math
 import pickle
+import pyttsx3
+
+engine = pyttsx3.init()
+voices = engine.getProperty('voices')
+
+selected_voice = voices[0]
+
+engine.setProperty('voice', "en-westindies")
+engine.setProperty('rate', 125)
+print(selected_voice.id)
 
 import warnings
 warnings.filterwarnings('ignore')
@@ -24,15 +34,11 @@ class PlankPoseEstimator(VideoTransformerBase):
     def __init__(self):
         super().__init__()
         # Load model
-        with open("./model/plank_model.pkl", "rb") as f:
-            self.sklearn_model = pickle.load(f)
-
-        # Dump input scaler
-        with open("./model/plank_input_scaler.pkl", "rb") as f2:
-            self.input_scaler = pickle.load(f2)
 
         self.current_stage = ""
         self.prediction_probability_threshold = 0.6
+        self.stage = None
+        self.flag = 0
 
         self.pose = mp_pose.Pose(min_detection_confidence=0.5, min_tracking_confidence=0.5)
         self.IMPORTANT_LMS = [
@@ -59,6 +65,7 @@ class PlankPoseEstimator(VideoTransformerBase):
 
         for lm in self.IMPORTANT_LMS:
             self.HEADERS += [f"{lm.lower()}_x", f"{lm.lower()}_y", f"{lm.lower()}_z", f"{lm.lower()}_v"]
+        self.frame_count=0
 
     def extract_important_keypoints(self, results) -> list:
         '''
@@ -73,7 +80,43 @@ class PlankPoseEstimator(VideoTransformerBase):
 
         return np.array(data).flatten().tolist()
 
+    def calculate_angle(self,a,b,c):
+        a = np.array(a) # First
+        b = np.array(b) # Mid
+        c = np.array(c) # End
 
+        radians = np.arctan2(c[1]-b[1], c[0]-b[0]) - np.arctan2(a[1]-b[1], a[0]-b[0])
+        angle = np.abs(radians*180.0/np.pi)
+
+        if angle >180.0:
+            angle = 360-angle
+
+        return angle
+
+    def findPose (self, img):
+        imgRGB = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+        self.results = self.pose.process(imgRGB)
+
+        if self.results.pose_landmarks:
+            if draw:
+                self.mpDraw.draw_landmarks(img,self.results.pose_landmarks,
+                                           self.mpPose.POSE_CONNECTIONS)
+
+        return img
+
+    def findPosition(self, img):
+        self.lmList = []
+        if self.results.pose_landmarks:
+            for id, lm in enumerate(self.results.pose_landmarks.landmark):
+                #finding height, width of the image printed
+                h, w, c = img.shape
+                #Determining the pixels of the landmarks
+                cx, cy = int(lm.x * w), int(lm.y * h)
+                self.lmList.append([id, cx, cy])
+                if draw:
+                    cv2.circle(img, (cx, cy), 5, (255,0,0), cv2.FILLED)
+        return self.lmList
+            # print(angle)
     def rescale_frame(self, frame, percent=100):
         '''
         Rescale a frame to a certain percentage compared to its original frame
@@ -117,37 +160,60 @@ class PlankPoseEstimator(VideoTransformerBase):
 
         # Make detection
         try:
-            # Extract keypoints from frame for the input
-            row = self.extract_important_keypoints(results)
-            X = pd.DataFrame([row], columns=self.HEADERS[1:])
-            X = pd.DataFrame(self.input_scaler.transform(X))
+            landmarks = results.pose_landmarks.landmark
 
-            # Make prediction and its probability
-            predicted_class = self.sklearn_model.predict(X)[0]
-            prediction_probability = self.sklearn_model.predict_proba(X)[0]
-            print(predicted_class, prediction_probability)
+            # Get coordinates
+            shoulder = [landmarks[11].x,landmarks[11].y]
+            elbow = [landmarks[13].x,landmarks[13].y]
+            wrist = [landmarks[15].x,landmarks[15].y]
+            hip = [landmarks[23].x,landmarks[23].y]
+            knee = [landmarks[25].x,landmarks[25].y]
 
-            # Evaluate model prediction
-            if predicted_class == "C" and prediction_probability[prediction_probability.argmax()] >= self.prediction_probability_threshold:
-                self.current_stage = "Correct"
-            elif predicted_class == "L" and prediction_probability[prediction_probability.argmax()] >= self.prediction_probability_threshold:
-                self.current_stage = "Low back"
-            elif predicted_class == "H" and prediction_probability[prediction_probability.argmax()] >= self.prediction_probability_threshold:
-                self.current_stage = "High back"
+            # Calculate angle
+            angle1 = self.calculate_angle(shoulder, elbow, wrist)
+            angle2 = self.calculate_angle(shoulder, hip, knee)
+
+            # Visualize angle
+
+
+
+            # Plank pose logic
+            if angle1>70 and angle1<90 and angle2>130 and angle2<175:
+                self.stage = "perfect"
+            elif angle2<130:
+                self.stage="Too High"
+                print('Make your back straight. Bring your buttocks DOWN')
+
+            elif angle2 > 175:
+                self.stage="Too Low"
+                print('Make your back straight. Bring your buttocks UP')
             else:
-                self.current_stage = "unk"
+                self.stage="unkown"
 
-            # Visualization
-            # Status box
+            if self.flag == 0 and self.stage == "perfect" :
+                self.flag = 1
+            elif self.flag == 1 and self.stage == "wrong" :
+                self.flag = 0
             cv2.rectangle(image, (0, 0), (250, 60), (245, 117, 16), -1)
 
-            # Display class
-            cv2.putText(image, "CLASS", (95, 12), cv2.FONT_HERSHEY_COMPLEX, 0.5, (0, 0, 0), 1, cv2.LINE_AA)
-            cv2.putText(image, self.current_stage, (90, 40), cv2.FONT_HERSHEY_COMPLEX, 1, (255, 255, 255), 2, cv2.LINE_AA)
+            if self.stage == "Too Low":
+                self.frame_count += 1
+                if self.frame_count >= 10:
+                    engine.say("Bring your back up")
+                    engine.runAndWait()
+                    self.frame_count = 0
+            elif self.stage == "Too High":
+                self.frame_count += 1
+                if self.frame_count >= 10:
+                    engine.say("Bring you back down")
+                    engine.runAndWait()
+                    self.frame_count = 0
 
-            # Display probability
-            cv2.putText(image, "PROB", (15, 12), cv2.FONT_HERSHEY_COMPLEX, 0.5, (0, 0, 0), 1, cv2.LINE_AA)
-            cv2.putText(image, str(round(prediction_probability[np.argmax(prediction_probability)], 2)), (10, 40), cv2.FONT_HERSHEY_COMPLEX, 1, (255, 255, 255), 2, cv2.LINE_AA)
+
+            cv2.putText(image, "Stage", (95, 12), cv2.FONT_HERSHEY_COMPLEX, 0.5, (0, 0, 0), 1, cv2.LINE_AA)
+            cv2.putText(image, self.stage, (90, 40), cv2.FONT_HERSHEY_COMPLEX, 1, (255, 255, 255), 2, cv2.LINE_AA)
+
+
 
         except Exception as e:
             print(f"Error: {e}")
