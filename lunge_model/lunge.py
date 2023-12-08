@@ -6,11 +6,19 @@ import datetime
 import streamlit as st
 from streamlit_webrtc import webrtc_streamer, WebRtcMode, RTCConfiguration, VideoTransformerBase
 import av
-
+import pyttsx3
 import pickle
 
 import warnings
 warnings.filterwarnings('ignore')
+engine = pyttsx3.init()
+voices = engine.getProperty('voices')
+
+selected_voice = voices[1]
+
+engine.setProperty('voice', selected_voice.id)
+engine.setProperty('rate', 125)
+
 
 # Drawing helpers
 mp_drawing = mp.solutions.drawing_utils
@@ -62,6 +70,7 @@ class LungeFormTransformer(VideoTransformerBase):
         self.ANGLE_THRESHOLDS = [60, 135]
         self.knee_over_toe = False
         self.pose = mp_pose.Pose(min_detection_confidence=0.5, min_tracking_confidence=0.5)
+        self.frame_count = 0
 
 
     def extract_important_keypoints(self, results) -> list:
@@ -410,10 +419,19 @@ class LungeFormTransformer(VideoTransformerBase):
                 1,
                 cv2.LINE_AA,
             )
+            print(err_predicted_class)
+
+            if err_predicted_class == 'L':
+                self.frame_count += 1
+                if self.frame_count >= 3:
+                    engine.say("Don't keep your knee over toes")
+                    engine.runAndWait()
+                    self.frame_count = 0
+
+
 
         except Exception as e:
             print(f"Error: {e}")
-            traceback.print_exc()
 
         return image
 
