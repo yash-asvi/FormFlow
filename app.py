@@ -10,10 +10,18 @@ from streamlit_webrtc import webrtc_streamer, WebRtcMode, RTCConfiguration, Vide
 import av
 import math
 import pickle
+import pyttsx3
+
+engine = pyttsx3.init()
+voices = engine.getProperty('voices')
+
+
+engine.setProperty('voice', "english")
+engine.setProperty('rate', 125)
+
 
 import warnings
 warnings.filterwarnings('ignore')
-from streamlit_lottie import st_lottie
 from squat_model.squat import SquatFormCorrectionTransformer
 from bicep_model.bicep import BicepVideoTransformer
 from lunge_model.lunge import LungeFormTransformer
@@ -36,13 +44,6 @@ st.markdown(
 )
 st.markdown("---")
 # st.markdown("---")
-def load(url):
-    r=requests.get(url)
-    if r.status_code!=200:
-        return None
-    return r.json()
-
-lottie=load("https://lottie.host/67658b63-5ca8-4612-b9b0-32be1deec781/FicQrmGPRj.json")
 
 exercise_col, animation_col = st.columns([2, 1])
 
@@ -51,19 +52,9 @@ with exercise_col:
     st.write("## Select an Exercise")
 
     # List of exercise options
-    exercise_options = ["Lunge","Squat","Plank","Biceps"]
+    exercise_options = ["Biceps","Squat","Plank","Lunge"]
     selected_exercise = st.selectbox("Choose an exercise:", exercise_options)
     
-
-
-    # Display buttons for exercise styles
-    
-
-# Animation column
-# with animation_col:
-#     # st.write("### Background Exercise Animation")
-#     # lottie_url = "https://assets7.lottiefiles.com/packages/lf20_zyojnpzk.json"
-#     st_lottie(lottie, speed=1, width=300, height=200,key="Excercise")
 st.markdown("---")
 exercise_transformers = {
     "Squat": SquatFormCorrectionTransformer,
@@ -82,15 +73,13 @@ exercise_videos = {
 }
 
 
-st.write(f"You chose to perform {selected_exercise} .")
+st.write(f"You chose to perform {selected_exercise}.")
 transformer_class = exercise_transformers.get(selected_exercise)
 webrtc_ctx = webrtc_streamer(
         key="example",
+        mode=WebRtcMode.SENDRECV,
         video_transformer_factory=transformer_class,
-        rtc_configuration={  # Add this config
-        "iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]
-    }
-
+        async_processing=True,
     )
 
 st.write("### Next Steps:")
